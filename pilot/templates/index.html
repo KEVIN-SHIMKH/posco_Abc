@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>후판 수주 문의 챗봇 (파일럿)</title>
+<style>
+  body { font-family: -apple-system, "Malgun Gothic", sans-serif; max-width: 760px; margin: 32px auto; padding: 0 16px; }
+  h2 { margin-bottom: 4px; }
+  h3 { margin: 0 0 10px; font-size: 15px; color: #333; }
+  .sub { color: #777; font-size: 13px; margin-bottom: 20px; }
+
+  .panel { border: 1px solid #ddd; border-radius: 10px; padding: 16px; margin-bottom: 20px; background: #fbfbfd; }
+  .field-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 12px; margin-bottom: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: #555; }
+  .field input[type=text], .field input[type=number] { padding: 7px 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+  .field.checkbox { flex-direction: row; align-items: center; gap: 6px; margin-top: 6px; }
+  .field.checkbox label { font-size: 13px; color: #333; }
+  .extra-msg { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+  .extra-msg label { font-size: 12px; color: #555; }
+  .extra-msg textarea { padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; resize: vertical; min-height: 44px; font-family: inherit; }
+  .panel button.submit { padding: 9px 18px; border-radius: 6px; border: 1px solid #2a5; background: #2a8a4a; color: #fff; font-size: 14px; cursor: pointer; }
+  .panel button.submit:hover { background: #237a3e; }
+  .panel button.clear { padding: 9px 14px; border-radius: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; margin-left: 6px; }
+
+  #log { border: 1px solid #ccc; border-radius: 8px; padding: 12px; height: 340px; overflow-y: auto; margin-bottom: 12px; background: #fafafa; }
+  .msg { margin-bottom: 14px; white-space: pre-wrap; line-height: 1.5; }
+  .user { color: #145a32; font-weight: bold; }
+  .bot { color: #1a2733; }
+  .system { color: #999; font-style: italic; font-size: 13px; }
+  .card { background: #eef3ff; border: 1px solid #99b8e0; padding: 10px 12px; border-radius: 8px; }
+
+  #feedback-box { margin-top: 10px; font-size: 13px; color: #555; display: none; }
+  #feedback-box input[type=text] { width: 260px; padding: 6px; }
+  button { border-radius: 6px; }
+
+  details { margin-top: 16px; font-size: 13px; color: #777; }
+  details .content { margin-top: 8px; }
+</style>
+</head>
+<body>
+<h2>후판 수주 문의 응답 챗봇 (파일럿)</h2>
+<div class="sub">mock 데이터 기반 데모입니다. 실제 판정/조회 결과가 아닙니다.</div>
+
+<div class="panel">
+  <h3>문의 정보 입력</h3>
+  <div class="field-grid">
+    <div class="field">
+      <label for="f-tap-target">출강목표</label>
+      <input type="text" id="f-tap-target" placeholder="예: C170150PG201">
+    </div>
+    <div class="field">
+      <label for="f-steel-grade">규격</label>
+      <input type="text" id="f-steel-grade" placeholder="예: AH36">
+    </div>
+    <div class="field checkbox" style="align-self:end">
+      <input type="checkbox" id="f-heat-treated">
+      <label for="f-heat-treated">열처리재</label>
+    </div>
+    <div class="field">
+      <label for="f-thickness">두께 (T)</label>
+      <input type="number" id="f-thickness" placeholder="예: 25">
+    </div>
+    <div class="field">
+      <label for="f-width">폭 (mm)</label>
+      <input type="number" id="f-width" placeholder="예: 2000">
+    </div>
+    <div class="field">
+      <label for="f-length">길이 (mm)</label>
+      <input type="number" id="f-length" placeholder="예: 6000">
+    </div>
+  </div>
+  <div class="extra-msg">
+    <label for="f-message">추가 설명 (선택)</label>
+    <textarea id="f-message" placeholder="예: 이 규격 투입 가능한 사이즈 구간이 어떻게 돼?"></textarea>
+  </div>
+  <button class="submit" id="submit-btn" type="button">문의하기</button>
+  <button class="clear" id="clear-btn" type="button">입력 초기화</button>
+
+  <details>
+    <summary>테스트용 주문 컨텍스트 (소LOT 경로 확인용)</summary>
+    <div class="content">
+      <label><input type="checkbox" id="order-written"> 주문서 작성됨</label>
+      <input type="number" id="quantity-ton" placeholder="주문 수량(톤)" style="width:120px">
+    </div>
+  </details>
+</div>
+
+<h3>대화</h3>
+<div id="log"></div>
+
+<div id="feedback-box">
+  마지막 응답에 대한 피드백:
+  <input type="text" id="feedback-input" placeholder="정정/보완 의견 입력">
+  <button id="feedback-submit">저장</button>
+  <span id="feedback-status"></span>
+</div>
+
+<script>
+const log = document.getElementById('log');
+const submitBtn = document.getElementById('submit-btn');
+const clearBtn = document.getElementById('clear-btn');
+const feedbackBox = document.getElementById('feedback-box');
+const feedbackInput = document.getElementById('feedback-input');
+const feedbackStatus = document.getElementById('feedback-status');
+
+let lastUserMessage = '';
+let lastBotText = '';
+
+function appendMsg(cls, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + cls;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+function appendCard(card) {
+  const div = document.createElement('div');
+  div.className = 'msg card';
+  div.innerHTML = `<b>${card.title}</b><br>${card.description}<br><a href="${card.url}" target="_blank">${card.url}</a>`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function num(id) {
+  const v = document.getElementById(id).value;
+  return v === '' ? undefined : parseFloat(v);
+}
+
+function summarizeSpec(spec) {
+  const parts = [];
+  if (spec.tap_target) parts.push(`출강목표 ${spec.tap_target}`);
+  if (spec.steel_grade) parts.push(`규격 ${spec.steel_grade}`);
+  if (spec.heat_treated) parts.push('열처리재');
+  if (spec.thickness !== undefined) parts.push(`두께 ${spec.thickness}T`);
+  if (spec.width !== undefined) parts.push(`폭 ${spec.width}`);
+  if (spec.length !== undefined) parts.push(`길이 ${spec.length}`);
+  return parts.join(', ');
+}
+
+async function submitInquiry() {
+  const structuredSpec = {
+    tap_target: document.getElementById('f-tap-target').value.trim() || undefined,
+    steel_grade: document.getElementById('f-steel-grade').value.trim() || undefined,
+    heat_treated: document.getElementById('f-heat-treated').checked || undefined,
+    thickness: num('f-thickness'),
+    width: num('f-width'),
+    length: num('f-length'),
+  };
+  const message = document.getElementById('f-message').value.trim();
+
+  const hasStructured = Object.values(structuredSpec).some(v => v !== undefined);
+  if (!message && !hasStructured) return;
+
+  const displayText = message || summarizeSpec(structuredSpec) || '(빈 문의)';
+  appendMsg('user', displayText);
+  lastUserMessage = displayText;
+  feedbackBox.style.display = 'none';
+
+  const orderContext = {
+    order_written: document.getElementById('order-written').checked,
+    quantity_ton: parseFloat(document.getElementById('quantity-ton').value) || undefined,
+  };
+
+  let res;
+  try {
+    res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, structured_spec: structuredSpec, order_context: orderContext }),
+    });
+  } catch (err) {
+    appendMsg('system', '서버 연결에 실패했습니다.');
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let botDiv = null;
+  lastBotText = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split('\n\n');
+    buffer = parts.pop();
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      const lines = part.split('\n');
+      let event = 'message';
+      let dataStr = '';
+      for (const line of lines) {
+        if (line.startsWith('event: ')) event = line.slice(7);
+        if (line.startsWith('data: ')) dataStr = line.slice(6);
+      }
+      if (!dataStr) continue;
+      const data = JSON.parse(dataStr);
+      if (event === 'link_card') {
+        appendCard(data);
+      } else {
+        if (!botDiv) botDiv = appendMsg('bot', '');
+        botDiv.textContent += data.text;
+        lastBotText += data.text;
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+  }
+  if (lastBotText) {
+    feedbackBox.style.display = 'block';
+    feedbackStatus.textContent = '';
+  }
+}
+
+submitBtn.addEventListener('click', submitInquiry);
+
+clearBtn.addEventListener('click', () => {
+  ['f-tap-target', 'f-steel-grade', 'f-thickness', 'f-width', 'f-length', 'f-message'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('f-heat-treated').checked = false;
+});
+
+document.getElementById('feedback-submit').addEventListener('click', async () => {
+  const feedbackText = feedbackInput.value.trim();
+  if (!feedbackText) return;
+  await fetch('/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_message: lastUserMessage, bot_response: lastBotText, feedback: feedbackText }),
+  });
+  feedbackStatus.textContent = ' 저장됨';
+  feedbackInput.value = '';
+});
+</script>
+</body>
+</html>

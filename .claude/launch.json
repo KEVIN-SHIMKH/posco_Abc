@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "husan-chatbot-pilot",
+      "runtimeExecutable": "pilot/.venv/Scripts/python.exe",
+      "runtimeArgs": ["pilot/app.py"],
+      "port": 5000
+    }
+  ]
+}

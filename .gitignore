@@ -1,0 +1,7 @@
+pilot/.venv/
+__pycache__/
+*.pyc
+.env
+pilot/.env
+*.egg-info/
+.DS_Store
