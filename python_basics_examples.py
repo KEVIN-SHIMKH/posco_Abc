@@ -11,6 +11,14 @@ def is_even(number: int) -> bool:
     return number % 2 == 0
 
 
+def multiplication_table(number: int, limit: int = 9) -> list[str]:
+    """입력한 수의 구구단을 ``number x 1``부터 반환합니다."""
+    if number < 1 or limit < 1:
+        raise ValueError("number와 limit은 1 이상의 정수여야 합니다.")
+
+    return [f"{number} x {multiplier} = {number * multiplier}" for multiplier in range(1, limit + 1)]
+
+
 class Student:
     """이름과 점수를 관리하는 간단한 학생 클래스입니다."""
 
@@ -30,6 +38,7 @@ class Student:
 if __name__ == "__main__":
     print(add_numbers(10, 20))
     print(is_even(7))
+    print("\n".join(multiplication_table(3)))
 
     student = Student("홍길동", 85)
     print(student.introduce())
